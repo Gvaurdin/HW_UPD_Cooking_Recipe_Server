@@ -8,6 +8,7 @@ using System.IO;
 
 namespace WpfApp_UDP_Server_Client.ServerContent
 {
+    [Serializable]
     public class KitchenRecipe
     {
         public string name { get; set; }
@@ -24,12 +25,12 @@ namespace WpfApp_UDP_Server_Client.ServerContent
             this.ingredients = ingredients;
         }
 
-        public byte[] Serialize()
+        public static byte[] Serialize(KitchenRecipe kitchenRecipe)
         {
             BinaryFormatter binaryFormatter = new BinaryFormatter();
             using(MemoryStream stream = new MemoryStream()) 
             {
-                binaryFormatter.Serialize(stream, this);
+                binaryFormatter.Serialize(stream, kitchenRecipe);
                 return stream.ToArray();
             }
         }
@@ -37,7 +38,7 @@ namespace WpfApp_UDP_Server_Client.ServerContent
         public static KitchenRecipe Deserialize(byte[] bytesKitch)
         {
             BinaryFormatter binaryFormatter = new BinaryFormatter();
-            using(MemoryStream stream = new MemoryStream()) 
+            using(MemoryStream stream = new MemoryStream(bytesKitch)) 
             {
                 return (KitchenRecipe)binaryFormatter.Deserialize(stream);
             }
@@ -47,13 +48,13 @@ namespace WpfApp_UDP_Server_Client.ServerContent
         {
             List<KitchenRecipe> kitchenRecipes = new List<KitchenRecipe>()
             {
-                new KitchenRecipe("Оливье", "images/olivier_salad.jpeg",
+                new KitchenRecipe("Салат Оливье", "/olivier_salad.jpeg",
                 new List<string>{"Вареная колбаса", "Картофель", "Морковь", "Соленые огурцы", "Яйцо куриное", "зеленый горошек", "Соль", "Майонез" }),
 
-                new KitchenRecipe ("Суп борщ", "images/soup_borscht.jpeg",
+                new KitchenRecipe ("Суп борщ", "/soup_borscht.jpeg",
                 new List<string>{"Свекла","Морковь", "Петрушка корень", "Капуста", "Картофель", "Лук", "Чеснок", "Помидоры", "Фасоль", "Перец сладкий", "Зелень укропа"}),
 
-                new KitchenRecipe("Яишница с беконом", "images/scrambled_eggs_with_bacon.jpg",
+                new KitchenRecipe("Яишница с беконом", "/scrambled_eggs_with_bacon.jpg",
                 new List<string>{"Яйцо куриное", "Бекон"})
             };
 

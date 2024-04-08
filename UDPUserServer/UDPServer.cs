@@ -19,33 +19,39 @@ namespace WpfApp_UDP_Server_Client
         private static SemaphoreSlim semaphore = new SemaphoreSlim(1);
         private static List<KitchenRecipe> kitchenRecipes = KitchenRecipe.CreateListKitchenRecipes();
 
-        public static void StartServer(string ipAddress, int port)
+        public static async Task StartServer()
         {
             try
             {
-
+                int bytesRead = 0;
+                IPHostEntry iPHostEntry = Dns.GetHostEntry(Dns.GetHostName());
+                IPAddress networkIPAddress = iPHostEntry.AddressList.FirstOrDefault(
+                    ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                    && !IPAddress.IsLoopback(ip));
+                int port = 49165;
                 requestClients = new Dictionary<string, string>();
                 socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
+                IPEndPoint endPoint = new IPEndPoint(networkIPAddress, port);
                 socket.Bind(endPoint);
-                MessageBox.Show("Server is run!", "Server Application", MessageBoxButton.OK, MessageBoxImage.Information);
+                Console.WriteLine("Server is run!...........");
 
                 while (true)
                 {
                     byte[] buffer = new byte[1024];
                     EndPoint clientEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                    int bytesRead = socket.ReceiveFrom(buffer, ref clientEndPoint);
+                    SocketReceiveFromResult result = await socket.ReceiveFromAsync(new ArraySegment<byte>(buffer), SocketFlags.None, clientEndPoint);
+                    bytesRead = result.ReceivedBytes;
                     if (bytesRead > 0)
                     {
-                        Thread clientThread = new Thread(() => HandleClient(clientEndPoint, buffer, bytesRead));
-                        clientThread.Start();
+                        clientEndPoint = result.RemoteEndPoint;
+                        await HandleClient(clientEndPoint, buffer, bytesRead);
                     }
                 }
             }
-            catch (Exception ex) { MessageBox.Show($"Server error : {ex.Message}", "Server Application", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex) { Console.WriteLine($"Error : {ex.Message}"); }
         }
 
-        private static void HandleClient(EndPoint clientEndPoint, byte[] buffer, int bytesRead)
+        private static async Task HandleClient(EndPoint clientEndPoint, byte[] buffer, int bytesRead)
         {
             try
             {
@@ -62,31 +68,29 @@ namespace WpfApp_UDP_Server_Client
                             timerAuth = new Timer(async (_) =>
                             {
                                 await DeleteClientFromBase(nickName, clientEndPoint);
-                            }, null, TimeSpan.FromMinutes(5), TimeSpan.Zero);
+                            }, null, TimeSpan.FromMinutes(10), TimeSpan.Zero);
 
-                            responseBytes = Encoding.UTF8.GetBytes($"Welcome to the server {nickName}");
-                            socket.SendTo(responseBytes, clientEndPoint);
+                            responseBytes = Encoding.UTF8.GetBytes($"Welcome to the server {nickName}-a");
+                            await socket.SendToAsync(new ArraySegment<byte>(responseBytes), SocketFlags.None, clientEndPoint);
                         }
                         else
                         {
                             responseBytes = Encoding.UTF8.GetBytes($"Enter a different name, the current name is already occupied-r");
-                            socket.SendTo(responseBytes, clientEndPoint);
+                            await socket.SendToAsync(new ArraySegment<byte>(responseBytes), SocketFlags.None, clientEndPoint);
                         }
                     }
-                    else
-                    {
-                        responseBytes = Encoding.UTF8.GetBytes($"You are not in the server database. You need to enter a nickname-r");
-                        socket.SendTo(responseBytes, clientEndPoint);
-                    }
+
                 }
                 else
                 {
-
-                    responseBytes = Encoding.UTF8.GetBytes("Server received your message");
-                    socket.SendTo(responseBytes, clientEndPoint);
+                    if (CheckRecipe(message))
+                    {
+                        KitchenRecipe kitchenRecipe = GetRecipe(message);
+                        await socket.SendToAsync(new ArraySegment<byte>(KitchenRecipe.Serialize(kitchenRecipe)), SocketFlags.None, clientEndPoint);
+                    }
                 }
             }
-            catch (Exception ex) { MessageBox.Show($"Server error : {ex.Message}", "Server Application", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex) { Console.WriteLine($"Error : {ex.Message}"); }
         }
 
         static bool CheckNickName(string nickName)
@@ -110,6 +114,30 @@ namespace WpfApp_UDP_Server_Client
             else return false;
         }
 
+        static bool CheckRecipe(string recipe)
+        {
+            bool trueRecipe = false;
+            if (recipe != "")
+            {
+                foreach (KitchenRecipe kitchenRecipe in kitchenRecipes)
+                {
+                    if (kitchenRecipe.name == recipe) { trueRecipe = true; break; }
+                }
+            }
+
+            return trueRecipe;
+        }
+
+        static KitchenRecipe GetRecipe(string recipe)
+        {
+            KitchenRecipe tmp = new KitchenRecipe();
+            foreach (KitchenRecipe kitchenRecipe in kitchenRecipes)
+            {
+                if(kitchenRecipe.name == recipe) {  tmp = kitchenRecipe; break; }
+            }
+            return tmp;
+        }
+
         static async Task DeleteClientFromBase(string nickName, EndPoint endPoint)
         {
             byte[] responseBytes = new byte[1024];
@@ -119,10 +147,11 @@ namespace WpfApp_UDP_Server_Client
                 if (requestClients.ContainsKey(nickName))
                 {
                     requestClients.Remove(nickName);
-                    responseBytes = Encoding.UTF8.GetBytes("You have been removed from the system");
-                    socket.SendTo(responseBytes, endPoint);
+                    responseBytes = Encoding.UTF8.GetBytes("You have been removed from the system-e");
+                    await socket.SendToAsync(new ArraySegment<byte>(responseBytes), SocketFlags.None, endPoint);
                 }
             }
+            catch (Exception ex) { Console.WriteLine($"Error : {ex.Message}"); }
             finally
             {
                 semaphore.Release();
